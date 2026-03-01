@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRecentMatches } from "@/lib/opendota";
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ steamId: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ steamId: string }> }) {
   try {
     const { steamId } = await params;
     const matches = await getRecentMatches(steamId);

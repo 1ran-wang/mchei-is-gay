@@ -1,25 +1,43 @@
+import { prisma } from "./db";
+
 export interface Player {
   name: string;
   steamIds: string[];
   color: string;
 }
 
-export const PLAYERS: Player[] = [
-  {
-    name: "WANGYIRAN",
-    steamIds: ["1878038311", "1878035863", "1879169708", "1910871590", "832277664", "1921114845", "826956595", "1027781618", "800163903"],
-    color: "#3b82f6", // blue
-  },
-  {
-    name: "HUCAIRUI",
-    steamIds: ["1877291958", "1878087395", "1877647328", "1918353556", "832312786", "1921671543", "826279909", "1026835324", "799952949"],
-    color: "#ef4444", // red
-  },
-  {
-    name: "JAY",
-    steamIds: ["1876201730", "1878025274", "1884260188", "832304199", "1028175263", "799626335"],
-    color: "#22c55e", // green
-  },
-];
+const COLORS: Record<string, string> = {
+  WANGYIRAN: "#3b82f6",
+  HUCAIRUI: "#ef4444",
+  JAY: "#22c55e",
+};
 
-export const ALL_STEAM_IDS = PLAYERS.flatMap(p => p.steamIds);
+export async function getPlayers(): Promise<Player[]> {
+  const accounts = await prisma.account.findMany({
+    where: { usedBy: { not: null }, steamId: { not: null } },
+    select: { usedBy: true, steamId: true },
+  });
+
+  const grouped: Record<string, string[]> = {};
+  for (const acc of accounts) {
+    if (!acc.usedBy || !acc.steamId) continue;
+    if (!grouped[acc.usedBy]) grouped[acc.usedBy] = [];
+    if (!grouped[acc.usedBy].includes(acc.steamId)) {
+      grouped[acc.usedBy].push(acc.steamId);
+    }
+  }
+
+  return Object.entries(grouped).map(([name, steamIds]) => ({
+    name,
+    steamIds,
+    color: COLORS[name] || "#a855f7",
+  }));
+}
+
+export async function getAllSteamIds(): Promise<string[]> {
+  const accounts = await prisma.account.findMany({
+    where: { steamId: { not: null } },
+    select: { steamId: true },
+  });
+  return [...new Set(accounts.map(a => a.steamId!).filter(Boolean))];
+}

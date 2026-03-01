@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id            Int       @id @default(autoincrement())
+  batch         String?
+  username      String    @unique
+  password      String?
+  steamId       String?
+  usedBy        String?
+  email         String?
+  emailPassword String?
+  emailProvider String?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([usedBy])
+  @@index([steamId])
+}
+
+model MatchCache {
+  id          Int       @id @default(autoincrement())
+  matchId     BigInt
+  steamId     String
+  heroId      Int
+  kills       Int
+  deaths      Int
+  assists     Int
+  playerSlot  Int
+  radiantWin  Boolean
+  duration    Int
+  startTime   Int
+  fetchedAt   DateTime  @default(now())
+
+  @@unique([matchId, steamId])
+  @@index([steamId])
+  @@index([fetchedAt])
+}
+
+model ProfileCache {
+  id          Int       @id @default(autoincrement())
+  steamId     String    @unique
+  personaName String?
+  avatarUrl   String?
+  rankTier    Int?
+  mmrEstimate Int?
+  wins        Int       @default(0)
+  losses      Int       @default(0)
+  fetchedAt   DateTime  @default(now())
+
+  @@index([fetchedAt])
+}
+
+model MmrHistory {
+  id          Int       @id @default(autoincrement())
+  steamId     String
+  mmrEstimate Int?
+  rankTier    Int?
+  recordedAt  DateTime  @default(now())
+
+  @@index([steamId])
+  @@index([recordedAt])
+}
+
+model ActivitySession {
+  id          Int       @id @default(autoincrement())
+  steamId     String
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  matchCount  Int       @default(0)
+  wins        Int       @default(0)
+  losses      Int       @default(0)
+
+  @@index([steamId])
+  @@index([startedAt])
+}

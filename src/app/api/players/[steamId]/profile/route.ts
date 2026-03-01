@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
-import { getPlayerProfile, getWinLoss } from "@/lib/opendota";
+import { getPlayerProfile } from "@/lib/opendota";
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ steamId: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ steamId: string }> }) {
   try {
     const { steamId } = await params;
-    const [profile, wl] = await Promise.all([
-      getPlayerProfile(steamId),
-      getWinLoss(steamId),
-    ]);
-    return NextResponse.json({ profile, wl });
+    const data = await getPlayerProfile(steamId);
+    return NextResponse.json(data);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

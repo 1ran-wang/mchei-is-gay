@@ -1,54 +1,109 @@
+import { prisma } from "./db";
+
 const BASE_URL = "https://api.opendota.com/api";
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-// Simple rate limiter: track calls
-let callCount = 0;
-let minuteStart = Date.now();
-
-function checkRateLimit() {
-  const now = Date.now();
-  if (now - minuteStart > 60000) {
-    callCount = 0;
-    minuteStart = now;
-  }
-  if (callCount >= 55) { // leave some margin under 60/min
-    throw new Error("Rate limit approaching, try again in a minute");
-  }
-  callCount++;
-}
-
-export async function opendotaFetch(endpoint: string) {
-  checkRateLimit();
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
-    next: { revalidate: 300 }, // cache 5 min
-  });
-
-  if (res.status === 429) {
-    throw new Error("OpenDota rate limit hit");
-  }
-
-  if (!res.ok) {
-    throw new Error(`OpenDota API error: ${res.status}`);
-  }
-
+async function fetchJson(endpoint: string) {
+  const res = await fetch(`${BASE_URL}${endpoint}`, { cache: "no-store" });
+  if (res.status === 429) throw new Error("Rate limited");
+  if (!res.ok) throw new Error(`OpenDota ${res.status}`);
   return res.json();
 }
 
 export async function getPlayerProfile(steamId: string) {
-  return opendotaFetch(`/players/${steamId}`);
+  const cached = await prisma.profileCache.findUnique({ where: { steamId } });
+  if (cached && Date.now() - cached.fetchedAt.getTime() < CACHE_TTL_MS) {
+    return {
+      profile: { profile: { personaname: cached.personaName, avatarfull: cached.avatarUrl }, rank_tier: cached.rankTier, mmr_estimate: { estimate: cached.mmrEstimate } },
+      wl: { win: cached.wins, lose: cached.losses },
+    };
+  }
+
+  const [profile, wl] = await Promise.all([
+    fetchJson(`/players/${steamId}`),
+    fetchJson(`/players/${steamId}/wl`),
+  ]);
+
+  const mmr = profile?.mmr_estimate?.estimate || null;
+  const rank = profile?.rank_tier || null;
+
+  await prisma.profileCache.upsert({
+    where: { steamId },
+    update: {
+      personaName: profile?.profile?.personaname,
+      avatarUrl: profile?.profile?.avatarfull,
+      rankTier: rank,
+      mmrEstimate: mmr,
+      wins: wl?.win || 0,
+      losses: wl?.lose || 0,
+      fetchedAt: new Date(),
+    },
+    create: {
+      steamId,
+      personaName: profile?.profile?.personaname,
+      avatarUrl: profile?.profile?.avatarfull,
+      rankTier: rank,
+      mmrEstimate: mmr,
+      wins: wl?.win || 0,
+      losses: wl?.lose || 0,
+    },
+  });
+
+  const lastMmr = await prisma.mmrHistory.findFirst({
+    where: { steamId },
+    orderBy: { recordedAt: "desc" },
+  });
+  if (!lastMmr || lastMmr.mmrEstimate !== mmr || lastMmr.rankTier !== rank) {
+    await prisma.mmrHistory.create({ data: { steamId, mmrEstimate: mmr, rankTier: rank } });
+  }
+
+  return { profile, wl };
 }
 
 export async function getRecentMatches(steamId: string, limit = 20) {
-  return opendotaFetch(`/players/${steamId}/recentMatches?limit=${limit}`);
-}
+  const cached = await prisma.matchCache.findMany({
+    where: { steamId },
+    orderBy: { startTime: "desc" },
+    take: limit,
+  });
 
-export async function getWinLoss(steamId: string) {
-  return opendotaFetch(`/players/${steamId}/wl`);
-}
+  const cacheAge = cached.length > 0 ? Date.now() - cached[0].fetchedAt.getTime() : Infinity;
+  if (cached.length > 0 && cacheAge < CACHE_TTL_MS) {
+    return cached.map(m => ({
+      match_id: Number(m.matchId),
+      hero_id: m.heroId,
+      kills: m.kills,
+      deaths: m.deaths,
+      assists: m.assists,
+      player_slot: m.playerSlot,
+      radiant_win: m.radiantWin,
+      duration: m.duration,
+      start_time: m.startTime,
+    }));
+  }
 
-export async function getPlayerHeroes(steamId: string, limit = 10) {
-  return opendotaFetch(`/players/${steamId}/heroes?limit=${limit}`);
-}
+  const matches = await fetchJson(`/players/${steamId}/recentMatches?limit=${limit}`);
 
-export async function getMatch(matchId: string) {
-  return opendotaFetch(`/matches/${matchId}`);
+  if (Array.isArray(matches)) {
+    for (const m of matches) {
+      await prisma.matchCache.upsert({
+        where: { matchId_steamId: { matchId: BigInt(m.match_id), steamId } },
+        update: { fetchedAt: new Date() },
+        create: {
+          matchId: BigInt(m.match_id),
+          steamId,
+          heroId: m.hero_id,
+          kills: m.kills,
+          deaths: m.deaths,
+          assists: m.assists,
+          playerSlot: m.player_slot,
+          radiantWin: m.radiant_win,
+          duration: m.duration,
+          startTime: m.start_time,
+        },
+      });
+    }
+  }
+
+  return matches;
 }

@@ -1,9 +1,11 @@
-import { PLAYERS } from "@/lib/players";
+import { getPlayers } from "@/lib/players";
 import PlayerCard from "@/components/PlayerCard";
 
-export const revalidate = 300; // revalidate every 5 min
+export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default async function Home() {
+  const players = await getPlayers();
+
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -12,10 +14,13 @@ export default function Home() {
             DotaWatch
           </h1>
           <p className="text-gray-400 mt-2 text-lg">Monitoring the squad 👁️</p>
+          <a href="/accounts" className="text-gray-600 hover:text-gray-400 text-sm mt-2 inline-block">
+            Manage Accounts →
+          </a>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {PLAYERS.map((player) => (
+          {players.map((player) => (
             <PlayerCard key={player.name} player={player} />
           ))}
         </div>
