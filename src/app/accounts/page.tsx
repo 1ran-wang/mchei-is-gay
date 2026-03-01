@@ -38,6 +38,18 @@ function CopyCell({ label, value }: { label: string; value: string | null }) {
   );
 }
 
+function TableCopy({ value }: { value: string | null }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return <span className="text-gray-700">—</span>;
+  return (
+    <span
+      className={`font-mono cursor-pointer hover:text-blue-400 transition-colors active:scale-95 ${copied ? "text-green-400" : "text-gray-300"}`}
+      onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+      title="Click to copy"
+    >{copied ? "✓" : value}</span>
+  );
+}
+
 const PLAYER_COLORS: Record<string, string> = {
   WANGYIRAN: "border-blue-500/50 bg-blue-500/5",
   HUCAIRUI: "border-red-500/50 bg-red-500/5",
@@ -59,6 +71,7 @@ export default function AccountsPage() {
   const [newAccount, setNewAccount] = useState<Partial<Account>>({ username: "" });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
 
   const fetchAccounts = useCallback(async () => {
     const url = filter ? `/api/accounts?usedBy=${filter}` : "/api/accounts";
@@ -131,6 +144,14 @@ export default function AccountsPage() {
               <option value="HUCAIRUI">HUCAIRUI</option>
               <option value="JAY">JAY</option>
             </select>
+            <div className="flex bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+              <button onClick={() => setViewMode("cards")} className={`px-3 py-2 text-sm ${viewMode === "cards" ? "bg-gray-600 text-white" : "text-gray-400 hover:text-white"}`} title="Card view">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+              </button>
+              <button onClick={() => setViewMode("table")} className={`px-3 py-2 text-sm ${viewMode === "table" ? "bg-gray-600 text-white" : "text-gray-400 hover:text-white"}`} title="Table view">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18M3 6h18M3 18h18" /></svg>
+              </button>
+            </div>
             <button onClick={() => setAdding(true)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">+ Add</button>
           </div>
         </div>
@@ -155,8 +176,8 @@ export default function AccountsPage() {
           </div>
         )}
 
-        {/* Cards */}
-        {loading ? <p className="text-gray-500">Loading...</p> : (
+        {/* Content */}
+        {loading ? <p className="text-gray-500">Loading...</p> : viewMode === "cards" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((acc) => {
               const cardColor = acc.usedBy ? (PLAYER_COLORS[acc.usedBy] || "border-gray-700") : "border-gray-700 bg-gray-900/20";
@@ -217,6 +238,46 @@ export default function AccountsPage() {
                 </div>
               );
             })}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-gray-800">
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">#</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Batch</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">User</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Password</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Steam ID</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Used By</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Email</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">E-Pass</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Provider</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Notes</th>
+                  <th className="text-left p-2 text-gray-500 font-medium text-xs">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((acc, i) => (
+                  <tr key={acc.id} className={`border-b border-gray-800/50 hover:bg-gray-900/30 ${i % 2 === 0 ? "bg-gray-900/10" : ""}`}>
+                    <td className="p-2 text-gray-600 text-xs">{i + 1}</td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.batch} /></td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.username} /></td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.password} /></td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.steamId} /></td>
+                    <td className="p-2 text-xs">{acc.usedBy ? <span className={`px-1.5 py-0.5 rounded text-xs ${PLAYER_BADGE[acc.usedBy] || "bg-gray-700 text-gray-400"}`}>{acc.usedBy}</span> : <span className="text-gray-700">&mdash;</span>}</td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.email} /></td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.emailPassword} /></td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.emailProvider} /></td>
+                    <td className="p-2 text-xs"><TableCopy value={acc.notes} /></td>
+                    <td className="p-2 text-xs flex gap-1">
+                      <button onClick={() => startEdit(acc)} className="text-blue-400 hover:text-blue-300">Edit</button>
+                      <button onClick={() => deleteAccount(acc.id)} className="text-red-400 hover:text-red-300">Del</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 

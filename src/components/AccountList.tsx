@@ -88,9 +88,18 @@ export default function AccountList({ player }: { player: Player }) {
     });
   }, [player.steamIds]);
 
+  // Sort accounts by most recent game (newest first)
+  const sortedSteamIds = [...player.steamIds].sort((a, b) => {
+    const aData = accounts.get(a);
+    const bData = accounts.get(b);
+    const aTime = aData?.matches?.[0]?.start_time || 0;
+    const bTime = bData?.matches?.[0]?.start_time || 0;
+    return bTime - aTime;
+  });
+
   return (
     <div className="space-y-3">
-      {player.steamIds.map((steamId) => {
+      {sortedSteamIds.map((steamId) => {
         const data = accounts.get(steamId);
         if (!data) return null;
 
