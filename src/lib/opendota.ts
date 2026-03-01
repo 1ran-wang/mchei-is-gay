@@ -1,34 +1,54 @@
-const API_KEYS = (process.env.OPENDOTA_API_KEYS || '').split(',').filter(Boolean);
-let keyIndex = 0;
+const BASE_URL = "https://api.opendota.com/api";
 
-function getNextKey(): string | null {
-  if (API_KEYS.length === 0) return null;
-  const key = API_KEYS[keyIndex % API_KEYS.length];
-  keyIndex++;
-  return key;
+// Simple rate limiter: track calls
+let callCount = 0;
+let minuteStart = Date.now();
+
+function checkRateLimit() {
+  const now = Date.now();
+  if (now - minuteStart > 60000) {
+    callCount = 0;
+    minuteStart = now;
+  }
+  if (callCount >= 55) { // leave some margin under 60/min
+    throw new Error("Rate limit approaching, try again in a minute");
+  }
+  callCount++;
 }
 
-export async function opendotaFetch(endpoint: string, options?: RequestInit) {
-  const key = getNextKey();
-  const separator = endpoint.includes('?') ? '&' : '?';
-  const url = `https://api.opendota.com/api${endpoint}${key ? `${separator}api_key=${key}` : ''}`;
-  
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Accept': 'application/json',
-      ...options?.headers,
-    },
+export async function opendotaFetch(endpoint: string) {
+  checkRateLimit();
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
+    next: { revalidate: 300 }, // cache 5 min
   });
 
   if (res.status === 429) {
-    // Rate limited, try next key
-    const retryKey = getNextKey();
-    const retryUrl = `https://api.opendota.com/api${endpoint}${retryKey ? `${separator}api_key=${retryKey}` : ''}`;
-    return fetch(retryUrl, options);
+    throw new Error("OpenDota rate limit hit");
   }
 
-  return res;
+  if (!res.ok) {
+    throw new Error(`OpenDota API error: ${res.status}`);
+  }
+
+  return res.json();
 }
 
-export { API_KEYS };
+export async function getPlayerProfile(steamId: string) {
+  return opendotaFetch(`/players/${steamId}`);
+}
+
+export async function getRecentMatches(steamId: string, limit = 20) {
+  return opendotaFetch(`/players/${steamId}/recentMatches?limit=${limit}`);
+}
+
+export async function getWinLoss(steamId: string) {
+  return opendotaFetch(`/players/${steamId}/wl`);
+}
+
+export async function getPlayerHeroes(steamId: string, limit = 10) {
+  return opendotaFetch(`/players/${steamId}/heroes?limit=${limit}`);
+}
+
+export async function getMatch(matchId: string) {
+  return opendotaFetch(`/matches/${matchId}`);
+}
