@@ -98,6 +98,11 @@ export default function AccountsPage() {
     const s = search.toLowerCase();
     return [acc.username, acc.password, acc.steamId, acc.email, acc.emailPassword, acc.batch, acc.notes]
       .some(v => v?.toLowerCase().includes(s));
+  }).sort((a, b) => {
+    // Extract batch number for sorting (highest first)
+    const numA = parseInt(a.batch?.match(/\d+/)?.[0] || "0");
+    const numB = parseInt(b.batch?.match(/\d+/)?.[0] || "0");
+    return numB - numA;
   });
 
   const editFields: (keyof Account)[] = ["batch", "username", "password", "steamId", "usedBy", "email", "emailPassword", "emailProvider", "notes"];
